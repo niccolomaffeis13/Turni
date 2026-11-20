@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Turni</title>
+  <!-- Installazione come app (nome, icona, colori) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2f5cff">
+  <link rel="icon" type="image/png" href="icone/favicon.png">
+  <link rel="apple-touch-icon" href="icone/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icone/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icone/apple-touch-icon-167.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icone/apple-touch-icon-152.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Turni">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Caratteri: Inter per i testi, Outfit per titoli e numeri (restano salvati per l'uso offline) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="turni.css">
+</head>
+<body>
+  <!-- ============ Banda laterale (in basso sul telefono) ============ -->
+  <nav class="rail">
+    <button id="btn-miei" class="rail-btn" aria-label="I miei turni" title="I miei turni">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M8.5 15l2.5 2.5 4.5-5"/>
+      </svg>
+      <span class="etich">Miei turni</span>
+    </button>
+    <button id="btn-persone" class="rail-btn" aria-label="Persone" title="Persone">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.8 3 2.5 3.5 5.2"/>
+      </svg>
+      <span class="etich">Persone</span>
+    </button>
+    <button id="btn-chiusure" class="rail-btn chiusure" aria-label="Chiusure" title="Chiusure del ristorante">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M9.5 12.5l5 5M14.5 12.5l-5 5"/>
+      </svg>
+      <span class="etich">Chiusure</span>
+    </button>
+    <button id="btn-segna" class="rail-btn" aria-label="Segna un periodo" title="Segna più giorni insieme">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>
+      </svg>
+      <span class="etich">Segna</span>
+    </button>
+    <!-- Filtro: vedi tutto, solo i miei turni, solo quando ci sono -->
+    <button id="btn-filtro" class="rail-btn filtro" aria-label="Filtra" title="Mostra solo i tuoi turni o le tue presenze">
+      <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 6h16M7 12h10M10 18h4"/>
+      </svg>
+      <span class="etich">Filtra</span>
+    </button>
+    <div class="rail-spazio"></div>
+    <button class="rail-btn impostazioni solo-pc" data-apri-impostazioni data-stato-cloud="spento" aria-label="Impostazioni" title="Impostazioni">
+      <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="pallino-stato"></span>
+    </button>
+  </nav>
+
+  <!-- Pannello che si apre dalla banda laterale -->
+  <aside id="pannello" class="pannello"></aside>
+
+  <!-- ============ Barra in alto (resta fissa) ============ -->
+  <header class="topbar">
+    <div class="barra-titolo">
+      <span id="nome-ristorante" class="nome-rist" title=""></span>
+      <div class="nav">
+        <button id="btn-prev" class="freccia" aria-label="Indietro"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <h1 id="titolo"></h1>
+        <button id="btn-next" class="freccia" aria-label="Avanti"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+      <button class="icon-btn trasparente impostazioni solo-tel" data-apri-impostazioni data-stato-cloud="spento" aria-label="Impostazioni" title="Impostazioni">
+        <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="pallino-stato"></span>
+      </button>
+    </div>
+    <div class="vista">
+      <div class="segmenti" role="tablist">
+        <button id="btn-anno" class="seg">Anno</button>
+        <button id="btn-mese" class="seg">Mese</button>
+        <button id="btn-giorno" class="seg">Giorno</button>
+      </div>
+      <button id="btn-oggi" class="chip oggi-btn">Oggi</button>
+    </div>
+    <div id="chip-filtro" class="chip-evidenzia chip-filtro" hidden></div>
+    <div id="chip-persona" class="chip-evidenzia chip-filtro chip-persona" hidden></div>
+  </header>
+
+  <main id="contenuto"></main>
+
+  <!-- Pulsante in basso: "Crea turni ufficiali" per l'amministratore, "+" (segna un periodo) per gli altri -->
+  <button class="fab" id="btn-fab" aria-label="Segna un periodo">+</button>
+
+  <!-- Barra che compare mentre scegli i giorni di chiusura -->
+  <div id="barra-sel" class="barra-sel" hidden>
+    <span class="bs-ic">✕</span>
+    <div class="bs-testo"><b id="bs-titolo">Tocca i giorni da chiudere</b><small id="bs-sotto"></small></div>
+    <button type="button" class="chip" id="bs-annulla">Annulla</button>
+    <button type="button" class="chip primario" id="bs-avanti" disabled>Avanti</button>
+  </div>
+
+  <!-- Menu che compare con ⋯, tasto destro o tenendo premuto -->
+  <div id="menu-flottante" class="menu-flottante" hidden></div>
+
+  <!-- Finestrella generica per domande veloci -->
+  <dialog id="dlg-scelta"></dialog>
+
+  <!-- ============ Crea turni ufficiali (solo amministratore) ============ -->
+  <dialog id="dlg-crea" class="pagina crea">
+    <div class="pagina-testa">
+      <button id="c-chiudi" class="icon-btn" aria-label="Chiudi" title="Chiudi (la bozza resta salvata)">‹</button>
+      <div class="pagina-intest">
+        <div class="pagina-titolo">Crea bozza o turni</div>
+        <div id="c-sotto" class="dettaglio">La bozza la vedono solo gli amministratori</div>
+      </div>
+      <button id="c-fine" class="chip primario">Fatto</button>
+    </div>
+    <div class="crea-nav">
+      <button id="c-prev" class="freccia" aria-label="Giorno aperto precedente"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div id="c-data" class="crea-data"></div>
+      <button id="c-next" class="freccia" aria-label="Giorno aperto successivo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <div id="c-corpo" class="crea-corpo"></div>
+    <div class="crea-piede">
+      <button type="button" id="c-prev2" class="chip">‹ Giorno prima</button>
+      <span class="crea-aiuto solo-pc">← → della tastiera o scorri col touchpad</span>
+      <button type="button" id="c-next2" class="chip primario">Giorno dopo ›</button>
+    </div>
+  </dialog>
+
+  <!-- ============ Impostazioni (rotellina) ============ -->
+  <dialog id="dlg-impostazioni" class="foglio">
+    <div class="foglio-testa">
+      <h2>Impostazioni</h2>
+      <button type="button" class="icon-btn" id="imp-chiudi" aria-label="Chiudi">✕</button>
+    </div>
+    <button type="button" class="riga-imp" id="imp-profilo">
+      <span class="ic-imp"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></span>
+      <span class="testo-imp"><b>Il tuo profilo</b><small id="imp-profilo-testo"></small></span>
+      <span class="freccina">›</span>
+    </button>
+    <button type="button" class="riga-imp" id="btn-account" data-stato="spento">
+      <span class="ic-imp">☁️</span>
+      <span class="testo-imp"><b>Account e sincronizzazione</b><small id="imp-account-testo"></small></span>
+      <span class="pallino-stato"></span><span class="freccina">›</span>
+    </button>
+    <div class="riga-imp">
+      <span class="ic-imp"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3 a9 9 0 0 1 0 18 z" fill="currentColor"/></svg></span>
+      <span class="testo-imp"><b>Aspetto</b></span>
+      <div class="segmenti piccoli" id="seg-tema">
+        <button type="button" class="seg" data-tema="chiaro">Chiaro</button>
+        <button type="button" class="seg" data-tema="grigio">Grigio</button>
+        <button type="button" class="seg" data-tema="scuro">Scuro</button>
+      </div>
+    </div>
+    <button type="button" class="riga-imp solo-admin" id="imp-codici">
+      <span class="ic-imp">🔑</span>
+      <span class="testo-imp"><b>Far entrare i colleghi</b><small>Nome e password del ristorante · cambia password</small></span>
+      <span class="freccina">›</span>
+    </button>
+    <button type="button" class="riga-imp solo-prova solo-creatore" id="imp-cambia">
+      <span class="ic-imp">🔁</span>
+      <span class="testo-imp"><b>Cambia persona (prova)</b><small>Usa l'app come se fossi una delle persone di prova</small></span>
+      <span class="freccina">›</span>
+    </button>
+    <button type="button" class="riga-imp solo-prova solo-creatore" id="imp-esempio">
+      <span class="ic-imp">🧪</span>
+      <span class="testo-imp"><b>Aggiungi 6 persone di prova</b><small>6 colleghi fissi finti, per provare i turni anche in pochi</small></span>
+      <span class="freccina">›</span>
+    </button>
+    <button type="button" class="riga-imp solo-creatore" id="imp-elimina-prova">
+      <span class="ic-imp">🧹</span>
+      <span class="testo-imp"><b>Elimina le persone di prova</b><small>Le toglie anche dai turni e dalle bozze</small></span>
+      <span class="freccina">›</span>
+    </button>
+    <button type="button" class="riga-imp solo-prova" id="imp-azzera">
+      <span class="ic-imp">🗑️</span>
+      <span class="testo-imp"><b>Cancella tutti i dati di prova</b><small>Riparte da zero su questo dispositivo</small></span>
+      <span class="freccina">›</span>
+    </button>
+  </dialog>
+
+  <!-- ============ Ingresso: crea o cerca il ristorante, tipologia, nickname ============ -->
+  <dialog id="dlg-profilo">
+    <form id="form-profilo" novalidate>
+      <h2 id="p-intestazione">Benvenuto in Turni</h2>
+      <p id="p-nota-prova" class="nota" style="margin-top:-8px" hidden>Modalità prova: i dati restano solo su questo dispositivo. Puoi creare più persone e passare dall'una all'altra dalle impostazioni.</p>
+      <div class="campo" id="p-modo-wrap">
+        <div class="segmenti larghi" id="p-modo">
+          <button type="button" class="seg" data-v="cerca">Cerca ristorante</button>
+          <button type="button" class="seg" data-v="crea">Crea ristorante</button>
+        </div>
+      </div>
+      <!-- Crea -->
+      <div id="p-crea">
+        <label>Nome del ristorante<input id="p-nome" maxlength="40" placeholder="Es. Trattoria da Mario" autocomplete="off"></label>
+        <label>Password del ristorante<input id="p-pass-nuova" type="password" maxlength="40" placeholder="Almeno 4 caratteri" autocomplete="new-password"></label>
+        <p class="nota" style="margin-top:-6px">La darai ai colleghi per entrare. Tu sarai l'amministratore.</p>
+      </div>
+      <!-- Cerca -->
+      <div id="p-cerca">
+        <label>Nome del ristorante<input id="p-cerca-testo" type="search" maxlength="40" placeholder="Scrivi almeno 2 lettere" autocomplete="off"></label>
+        <div id="p-risultati" class="lista-scelta risultati-rist"></div>
+        <label id="p-pass-wrap">Password del ristorante<input id="p-pass" type="password" maxlength="40" placeholder="Te la dà l'amministratore" autocomplete="off"></label>
+      </div>
+      <div class="campo">
+        <span>Tipologia</span>
+        <div class="scelta-card" id="p-tipo">
+          <button type="button" data-v="fisso"><b>Fisso</b><small>Di solito ci sei: segni solo quando NON ci sei</small></button>
+          <button type="button" data-v="occasionale"><b>Occasionale</b><small>Segni sia quando ci sei sia quando non ci sei</small></button>
+        </div>
+      </div>
+      <label>Nickname<input id="p-nick" maxlength="20" placeholder="Il nome che vedono gli altri (es. Nico)" autocomplete="off"></label>
+      <p class="nota" id="p-nota-ruolo" style="margin-top:-6px"></p>
+      <p class="acc-messaggio nota" id="p-msg"></p>
+      <div class="azioni">
+        <button type="button" class="chip" id="p-annulla">Annulla</button>
+        <button type="submit" class="chip primario" id="p-ok">Entra</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============ Accesso (email e password) ============ -->
+  <dialog id="dlg-accesso">
+    <div id="acc-fuori">
+      <h2>Accedi a Turni</h2>
+      <p class="nota" style="margin-top:0">Con un account vedi gli stessi turni su computer, iPad e telefono, insieme ai tuoi colleghi.</p>
+      <form id="form-accesso" novalidate>
+        <label>Email<input id="acc-email" type="email" autocomplete="email" placeholder="nome@esempio.it"></label>
+        <label>Password<input id="acc-password" type="password" autocomplete="current-password" placeholder="almeno 6 caratteri"></label>
+        <div class="azioni">
+          <button type="button" class="chip" id="acc-registrati">Crea account</button>
+          <button type="submit" class="chip primario">Accedi</button>
+        </div>
+      </form>
+      <p id="acc-messaggio" class="nota acc-messaggio"></p>
+      <div class="azioni acc-secondarie">
+        <button type="button" class="link-btn" id="acc-password-dimenticata">Password dimenticata?</button>
+      </div>
+    </div>
+    <div id="acc-dentro" hidden>
+      <h2>Il tuo account</h2>
+      <p><b id="acc-email-attuale"></b></p>
+      <p class="nota" id="acc-stato"></p>
+      <div class="azioni">
+        <button type="button" class="chip pericolo" id="acc-esci">Esci</button>
+        <button type="button" class="chip" id="acc-sincronizza">Sincronizza ora</button>
+        <button type="button" class="chip primario" id="acc-chiudi">Fatto</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Impostazioni di collegamento (Supabase): si compilano in config.js -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <!-- Libreria di Supabase (se sei offline non si carica, e l'app funziona lo stesso) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="cloud.js"></script>
+  <script>
+    // Fa partire l'app anche offline (funziona solo sul sito online, non aprendo il file dal computer)
+    if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    }
+  </script>
+</body>
+</html>
