@@ -352,6 +352,7 @@ function avviso(titolo, testo) {
 function bottoniRisposta(g, t, piccoli = false) {
   const p = mioProfilo();
   if (!p || passato(g) || chiusoTurno(daChiave(g), t)) return "";
+  if (vistoSettore() !== settoreDi(p)) return "";   // nell'altro settore non ti segni (si cambia dal profilo)
   const s = statoDi(p.id, g, t), cl = piccoli ? " piccolo" : "";
   const ci = p.tipo === "fisso" ? s !== "no" : s === "si";   // il fisso c'è di base
   const or = testoOrario(orarioDi(p.id, g, t));
@@ -562,6 +563,9 @@ function disegnaGiorno() {
     <button class="opzioni-btn" id="g-opzioni" aria-label="Altre opzioni" title="Chi non c'è e altre opzioni">⋯</button></div>`;
 
   const regole = regoleSu(d);
+  const mp = mioProfilo();
+  if (mp && vistoSettore() !== settoreDi(mp) && !passato(g) && !chiusoGiorno(d))
+    html += `<div class="avviso-settore">Stai guardando la <b>${SETTORI[vistoSettore()].toLowerCase()}</b>: tu sei in ${SETTORI[settoreDi(mp)].toLowerCase()}, quindi qui non puoi segnarti. Per cambiare settore: <b>Impostazioni → Il tuo profilo</b>.</div>`;
   if (chiusoGiorno(d)) {
     const nota = regole.map(c => c.nota).find(Boolean);
     html += `<div class="banda-chiuso">Ristorante chiuso${nota ? ` <small>· ${esc(nota)}</small>` : ""}
@@ -1357,7 +1361,7 @@ function aggiornaFiltro() {
   $("btn-filtro").classList.toggle("filtro-attivo", attivo);
   const chip = $("chip-filtro");
   if (attivo) {
-    chip.innerHTML = `Vedi solo: <b>${NOMI_FILTRO[filtro]}${filtro === "settore" ? " " + SETTORI[vistoSettore()].toLowerCase() : ""}</b> <button type="button" aria-label="Vedi tutto">✕</button>`;
+    chip.innerHTML = `Vedi solo: <b>${NOMI_FILTRO[filtro]}${filtro === "settore" ? " " + SETTORI[vistoSettore()].toLowerCase() : ""}</b> <button type="button" aria-label="Torna a Disponibilità">✕</button>`;
     chip.querySelector("button").onclick = () => { filtro = "tutto"; aggiornaFiltro(); disegna(); };
   }
   chip.hidden = !attivo;
@@ -1367,7 +1371,7 @@ function apriFiltro() {
   finestra("Cosa vuoi vedere?", `
     <div class="filtro-lista" id="f-lista"></div>
     <div class="azioni"><button type="button" class="chip primario" data-azione="ok">Fatto</button></div>`, (d, fatto) => {
-    const voci = [["tutto", "Tutto", "var(--accento)"], ["ufficiali", "Turni ufficiali di tutti (sala e cucina)", "var(--cena)"], ["settore", `Turni ufficiali solo ${SETTORI[vistoSettore()].toLowerCase()}`, "var(--pranzo)"], ["miei", "Solo i miei turni", "var(--mio)"]];
+    const voci = [["tutto", "Disponibilità", "var(--accento)"], ["ufficiali", "Turni ufficiali di tutti (sala e cucina)", "var(--cena)"], ["settore", `Turni ufficiali solo ${SETTORI[vistoSettore()].toLowerCase()}`, "var(--pranzo)"], ["miei", "Solo i miei turni", "var(--mio)"]];
     const disegnaVoci = () => {
       d.querySelector("#f-lista").innerHTML = voci.map(([k, n, c]) => `
         <button type="button" class="voce-filtro ${filtro === k ? "acceso" : ""}" data-f="${k}">
