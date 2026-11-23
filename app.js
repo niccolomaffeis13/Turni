@@ -100,6 +100,12 @@ const nomeDi = id => (profilo(id) ? profilo(id).nickname : "?");
 const sonoCreatore = () => MODALITA_PROVA || !!(D.ristorante && ioReale && D.ristorante.creato_da === ioReale);
 const stoProvando = () => !MODALITA_PROVA && ioReale && io !== ioReale;
 const esperto = p => !!(p && (p.admin || p.esperto));   // l'amministratore è sempre esperto
+// Settore: sala o cucina (chi c'era prima di questa novità è in cucina)
+const SETTORI = { sala: "Sala", cucina: "Cucina" };
+const settoreDi = p => (p && p.settore === "sala" ? "sala" : "cucina");
+let settoreVisto = null;   // il settore che stai guardando; all'apertura è sempre il tuo
+const vistoSettore = () => settoreVisto || settoreDi(mioProfilo());
+const delSettore = id => !!profilo(id) && settoreDi(profilo(id)) === vistoSettore();
 const iniziale = n => (n || "?").trim().charAt(0).toUpperCase();
 const perNome = (a, b) => a.nickname.localeCompare(b.nickname, "it", { sensitivity: "base" });
 
@@ -111,9 +117,9 @@ function disponibile(p, g, t) {
   const s = statoDi(p.id, g, t);
   return p.tipo === "fisso" ? s !== "no" : s === "si";
 }
-function elenchi(g, t) {
+function elenchi(g, t, tutti = false) {
   const disp = [], nonDisp = [], senza = [];
-  D.profili.forEach(p => {
+  D.profili.filter(p => tutti || settoreDi(p) === vistoSettore()).forEach(p => {
     const s = statoDi(p.id, g, t);
     if (s === "no") nonDisp.push(p);
     else if (disponibile(p, g, t)) disp.push(p);
@@ -127,10 +133,56 @@ function segnaRisposta(g, t, valore, uid = io) {
   let nuovo;
   if (p && p.tipo === "fisso") {
     // il fisso c'è di base: "Ci sono" toglie il "non ci sono", "Non ci sono" si accende e si spegne
-    nuovo = valore === "si" ? "" : (attuale === "no" ? "" : "no");
-    if (nuovo === attuale) return;
+    if (valore === "si") { if (attuale !== "no") return; nuovo = ""; }
+    else nuovo = attuale === "no" ? "" : "no";
   } else nuovo = attuale === valore ? "" : valore;
-  scriviRiga("disponibilita", { user_id: uid, giorno: g, turno: t, stato: nuovo });
+  // cambiando risposta l'orario riparte da "tutto il turno"
+  scriviRiga("disponibilita", { user_id: uid, giorno: g, turno: t, stato: nuovo, dalle: "", alle: "" });
+}
+// Orario in cui ci sei: "" = inizio / fine turno
+const orarioDi = (uid, g, t) => { const r = D.disponibilita[`${uid}|${g}|${t}`] || {}; return { dalle: r.dalle || "", alle: r.alle || "" }; };
+const oraBreve = h => h.replace(/:00$/, "").replace(/^0(\d)/, "$1");
+function testoOrario(o) {
+  if (o.dalle && o.alle) return `${oraBreve(o.dalle)}–${oraBreve(o.alle)}`;
+  if (o.dalle) return `dalle ${oraBreve(o.dalle)}`;
+  if (o.alle) return `fino alle ${oraBreve(o.alle)}`;
+  return "";
+}
+// Orari tra cui scegliere (ogni quarto d'ora)
+function orariTurno(t) {
+  const [da, a] = t === "pranzo" ? [10, 17] : [17, 25];
+  const fuori = [];
+  for (let h = da; h <= a; h++) for (const m of [0, 15, 30, 45]) { if (h === a && m) break; fuori.push(`${pad(h % 24)}:${pad(m)}`); }
+  return fuori;
+}
+async function chiediOrario(g, t, uid = io) {
+  const o = orarioDi(uid, g, t), ore = orariTurno(t);
+  const opzioni = (vuoto, val) => `<option value="">${vuoto}</option>` + ore.map(h => `<option value="${h}" ${h === val ? "selected" : ""}>${h}</option>`).join("");
+  const r = await finestra(`${NOME_TURNO[t]} · ${dataMedia(g)}`, `
+    <p class="nota" style="margin-top:-8px">Se ci sei solo per una parte del turno, scegli da che ora o fino a che ora. Puoi cambiarne anche solo una.</p>
+    <div class="due-campi">
+      <label>Inizio<select id="or-dalle">${opzioni("Inizio turno", o.dalle)}</select></label>
+      <label>Fine<select id="or-alle">${opzioni("Fine turno", o.alle)}</select></label>
+    </div>
+    <p class="acc-messaggio nota" id="or-msg"></p>
+    ${bottoniOkAnnulla("Salva", `<button type="button" class="chip" data-azione="tutto" style="margin-right:auto">Tutto il turno</button>`)}`, (dlg, fatto) => {
+    dlg.querySelector('[data-azione="annulla"]').onclick = () => fatto(undefined);
+    dlg.querySelector('[data-azione="tutto"]').onclick = () => fatto({ dalle: "", alle: "" });
+    dlg.querySelector("form").onsubmit = e => {
+      e.preventDefault();
+      const dalle = dlg.querySelector("#or-dalle").value, alle = dlg.querySelector("#or-alle").value;
+      // per la cena le ore dopo mezzanotte (00:xx) vengono dopo le 23
+      const ord = h => (t === "cena" && h < "12:00" ? "2" : "1") + h;
+      if (dalle && alle && ord(alle) <= ord(dalle)) { const m = dlg.querySelector("#or-msg"); m.textContent = "La fine deve essere dopo l'inizio."; m.className = "acc-messaggio nota errore"; return; }
+      fatto({ dalle, alle });
+    };
+  });
+  if (!r) return;
+  const p = profilo(uid);
+  const st = statoDi(uid, g, t);
+  const stato = p && p.tipo === "fisso" ? (st === "no" ? "" : st) : "si";
+  scriviRiga("disponibilita", { user_id: uid, giorno: g, turno: t, stato, dalle: r.dalle, alle: r.alle });
+  disegna();
 }
 
 // ================== CHIUSURE ==================
@@ -302,8 +354,10 @@ function bottoniRisposta(g, t, piccoli = false) {
   if (!p || passato(g) || chiusoTurno(daChiave(g), t)) return "";
   const s = statoDi(p.id, g, t), cl = piccoli ? " piccolo" : "";
   const ci = p.tipo === "fisso" ? s !== "no" : s === "si";   // il fisso c'è di base
-  return `<div class="risposta">
-    <button type="button" class="rb si${cl} ${ci ? "attivo" : ""}" data-risp="si" data-g="${g}" data-t="${t}">Ci sono</button>
+  const or = testoOrario(orarioDi(p.id, g, t));
+  const orario = !piccoli && ci ? `<button type="button" class="rb orario ${or ? "impostato" : ""}" data-orario data-g="${g}" data-t="${t}" title="Scegli da che ora a che ora ci sei">🕒 ${or || "Tutto il turno"} <span class="freccia-giu">▾</span></button>` : "";
+  return `<div class="risposta">${orario}
+    <button type="button" class="rb si${cl} ${ci ? "attivo" : ""}" data-risp="si" data-g="${g}" data-t="${t}">${piccoli && ci && or ? `Ci sono · ${esc(or)}` : "Ci sono"}</button>
     <button type="button" class="rb no${cl} ${s === "no" ? "attivo" : ""}" data-risp="no" data-g="${g}" data-t="${t}">Non ci sono</button></div>`;
 }
 // Colore di pranzo / cena per chi guarda: verde se ci sei, rosso se non ci sei,
@@ -320,10 +374,11 @@ function nomiCorti(ids, max = 3) {
   const tutti = [...io1, ...altri];
   return tutti.slice(0, max).join(", ") + (tutti.length > max ? ` +${tutti.length - max}` : "");
 }
-function chipPersona(p, g, { ufficiale = false } = {}) {
+function chipPersona(p, g, { ufficiale = false, t = null } = {}) {
   const d = daChiave(g);
   const n = turniNelMese(p.id, d.getFullYear(), d.getMonth());
-  return `<span class="persona ${ufficiale ? "ufficiale" : ""} ${p.id === io ? "io" : ""}">${esc(p.nickname)}${sonoAdmin() && esperto(p) ? ` <span class="badge" title="Esperto (lo vedi solo tu)">E</span>` : ""}<span class="conta-turni" title="Turni programmati nel mese">${n}</span></span>`;
+  const or = t ? testoOrario(orarioDi(p.id, g, t)) : "";
+  return `<span class="persona ${ufficiale ? "ufficiale" : ""} ${p.id === io ? "io" : ""}">${esc(p.nickname)}${or ? `<span class="orario-pers">${esc(or)}</span>` : ""}${sonoAdmin() && esperto(p) ? ` <span class="badge" title="Esperto (lo vedi solo tu)">E</span>` : ""}<span class="conta-turni" title="Turni programmati nel mese">${n}</span></span>`;
 }
 
 // =====================================================================
@@ -376,14 +431,15 @@ function contenutoCella(d) {
       pillole += `<span class="pillola chiusa">${sigla}✕</span>`;
       return;
     }
-    const uff = ufficiali(k, t), mio = uff.includes(io);
+    const tuttiU = ufficiali(k, t), mio = tuttiU.includes(io);
+    const uff = filtro === "ufficiali" ? tuttiU : tuttiU.filter(delSettore);
     if (filtro === "miei") {
       if (!mio) return;
       etichette += `<div class="etichetta mio-turno" style="--col:${COL_TURNO[t]}"><span class="et-titolo">★ ${NOME_TURNO[t]} · sei di turno</span></div>`;
       pillole += `<span class="pillola mio-turno" style="--col:${COL_TURNO[t]}">★${sigla}</span>`;
       return;
     }
-    if (filtro === "ufficiali") {
+    if (filtro === "ufficiali" || filtro === "settore") {
       if (!uff.length) return;
       etichette += `<div class="etichetta ufficiale ${mio ? "mio-turno" : ""}" style="--col:${COL_TURNO[t]}"><span class="et-titolo">${mio ? "★ " : ""}${sigla} · ${esc(nomiCorti(uff, 4))}</span></div>`;
       pillole += `<span class="pillola ufficiale ${mio ? "mio-turno" : ""}" style="--col:${COL_TURNO[t]}">${mio ? "★" : ""}${sigla}${uff.length}</span>`;
@@ -394,7 +450,7 @@ function contenutoCella(d) {
     const assente = mioProfilo() && statoDi(io, k, t) === "no" ? "assente" : "";
     const presente = !assente && mioProfilo() && disponibile(mioProfilo(), k, t) ? "presente" : "";
     if (sonoAdmin() && haBozza(k, t)) {
-      const b = inBozza(k, t);
+      const b = inBozza(k, t).filter(delSettore);
       etichette += `<div class="etichetta bozza" style="--col:${COL_TURNO[t]}"><span class="et-titolo">${sigla} · ✎ ${b.length ? esc(nomiCorti(b)) : "nessuno"}</span></div>`;
       pillole += `<span class="pillola bozza" style="--col:${COL_TURNO[t]}">${sigla}${b.length}</span>`;
     } else if (uff.length) {
@@ -475,7 +531,7 @@ function disegnaAnteprima() {
   } else {
     corpo = TURNI.map(t => {
       if (chiusoTurno(d, t)) return `<div class="ant-turno" style="--col:var(--chiuso)"><span class="ant-barra" style="background:var(--chiuso)"></span><span class="ant-testo"><span class="ant-tit">${NOME_TURNO[t]}</span><span class="ant-sotto">Chiuso</span></span><span></span></div>`;
-      const uff = ufficiali(g, t), { disp } = elenchi(g, t);
+      const uff = ufficiali(g, t).filter(delSettore), { disp } = elenchi(g, t);
       const sotto = uff.includes(io)
         ? `<span class="sei-di-turno">★ Sei di turno</span> ${uff.length > 1 ? `con ${esc(nomiCorti(uff.filter(x => x !== io), 5))}` : ""}`
         : uff.length
@@ -516,7 +572,9 @@ function disegnaGiorno() {
       if (chiusoGiorno(d)) return "";
       return `<div class="card-turno chiusa"><div class="card-testa"><h3>${NOME_TURNO[t]}</h3><span class="dettaglio">Chiuso</span></div></div>`;
     }
-    const uff = ufficiali(g, t), { disp } = elenchi(g, t);
+    const uff = ufficiali(g, t).filter(delSettore), { disp } = elenchi(g, t);
+    const altroSettore = vistoSettore() === "sala" ? "cucina" : "sala";
+    const uffAltro = ufficiali(g, t).filter(id => profilo(id) && settoreDi(profilo(id)) === altroSettore);
     const np = prenotati(g, t);
     const pren = sonoAdmin()
       ? `<button type="button" class="prenotati ${np ? "" : "vuoto"}" data-prenotati="${t}" title="Cambia i prenotati">${np ? `${np} <small>prenotati</small>` : "+ prenotati"}</button>`
@@ -527,11 +585,12 @@ function disegnaGiorno() {
     return `
       <div class="card-turno ${uff.includes(io) ? "mio" : ""}" style="--col:${coloreMio(g, t)}">
         <div class="card-testa"><h3>${NOME_TURNO[t]}</h3>${uff.includes(io) ? `<span class="sei-di-turno grande">★ Sei di turno</span>` : ""}${pren}${bottoniRisposta(g, t)}</div>
-        <div class="sez-tit riga-uff">${uff.length ? `Turno ufficiale · ${uff.length} ${uff.length === 1 ? "persona" : "persone"}${sonoAdmin() ? ` · ${espertiUff} esperti` : ""}` : "Turno ufficiale · non ancora fatto"}
+        <div class="sez-tit riga-uff">${uff.length ? `Turno ufficiale ${SETTORI[vistoSettore()].toLowerCase()} · ${uff.length} ${uff.length === 1 ? "persona" : "persone"}${sonoAdmin() ? ` · ${espertiUff} esperti` : ""}` : "Turno ufficiale · non ancora fatto"}
           ${sonoAdmin() ? `<button type="button" class="mod-turni" data-modifica-turni>✏️ ${uff.length ? "Modifica" : "Crea"}</button>` : ""}</div>
-        ${uff.length ? `<div class="persone">${pUff.map(p => chipPersona(p, g, { ufficiale: true })).join("")}</div>` : ""}
-        ${filtro === "ufficiali" ? "" : `<div class="sez-tit">${uff.length ? "Altri disponibili" : "Disponibili"} (${altri.length})</div>
-        <div class="persone">${altri.length ? altri.sort(perNome).map(p => chipPersona(p, g)).join("") : `<span class="vuoto-piccolo">${uff.length ? "Nessun altro" : "Nessuno ha detto che c'è"}</span>`}</div>`}
+        ${uff.length ? `<div class="persone">${pUff.map(p => chipPersona(p, g, { ufficiale: true, t })).join("")}</div>` : ""}
+        ${uffAltro.length ? `<div class="altro-settore">In ${SETTORI[altroSettore].toLowerCase()}: ${esc(nomiCorti(uffAltro, 8))}</div>` : ""}
+        ${filtro === "ufficiali" || filtro === "settore" ? "" : `<div class="sez-tit">${uff.length ? "Altri disponibili" : "Disponibili"} (${altri.length})</div>
+        <div class="persone">${altri.length ? altri.sort(perNome).map(p => chipPersona(p, g, { t })).join("") : `<span class="vuoto-piccolo">${uff.length ? "Nessun altro" : "Nessuno ha detto che c'è"}</span>`}</div>`}
       </div>`;
   }).join("");
   $("contenuto").innerHTML = `<section class="giorno">${html}</section>`;
@@ -542,10 +601,25 @@ function disegnaGiorno() {
   $("contenuto").querySelectorAll("[data-modifica-turni]").forEach(b => b.addEventListener("click", () => apriCrea(g)));
 }
 
+// Tasto in alto a sinistra: guardi la sala o la cucina
+function aggiornaSettore() {
+  const b = $("btn-settore");
+  if (!b) return;
+  b.hidden = !mioProfilo();
+  b.innerHTML = `<span class="set-nome">${SETTORI[vistoSettore()]}</span><span class="set-cambia">⇄</span>`;
+  b.title = `Stai guardando: ${SETTORI[vistoSettore()].toLowerCase()} · tocca per cambiare` + (D.ristorante ? ` · ${D.ristorante.nome}` : "");
+  b.classList.toggle("altro", vistoSettore() !== settoreDi(mioProfilo()));
+}
+$("btn-settore").addEventListener("click", () => {
+  settoreVisto = vistoSettore() === "sala" ? "cucina" : "sala";
+  aggiornaFiltro(); disegna(); aggiornaPannello();
+});
 function vaiAGiorno(d) { dataCorrente = new Date(d.getFullYear(), d.getMonth(), d.getDate()); vista = "giorno"; disegna(); }
 
-// Pulsanti "Ci sono / Non ci sono" ovunque si trovino
+// Pulsanti "Ci sono / Non ci sono" e orario, ovunque si trovino
 $("contenuto").addEventListener("click", e => {
+  const o = e.target.closest("[data-orario]");
+  if (o) { e.stopPropagation(); chiediOrario(o.dataset.g, o.dataset.t); return; }
   const b = e.target.closest("[data-risp]");
   if (!b) return;
   e.stopPropagation();
@@ -947,7 +1021,7 @@ function rigaPersona(p, g, t, scelti, mese, avvisoNo = "") {
   const n = turniNelMese(p.id, mese.getFullYear(), mese.getMonth(), true);
   return `<button type="button" class="riga-pers ${scelto ? "scelto" : ""} ${avvisoNo ? "non-disp" : ""}" data-scegli="${p.id}" data-t="${t}">
     <span class="casella">${scelto ? "✓" : ""}</span>
-    <span class="nome-p">${esc(p.nickname)}<span class="conta-turni">${testoTurni(n)} nel mese</span></span>
+    <span class="nome-p">${esc(p.nickname)}${testoOrario(orarioDi(p.id, g, t)) ? `<span class="orario-pers">${esc(testoOrario(orarioDi(p.id, g, t)))}</span>` : ""}<span class="conta-turni">${testoTurni(n)} nel mese</span></span>
     ${avvisoNo ? `<span class="avviso-no">${avvisoNo}</span>` : ""}
     ${esperto(p) ? `<span class="badge">Esperto</span>` : ""}
   </button>`;
@@ -957,14 +1031,15 @@ function disegnaCrea() {
   const nBozza = Object.keys(bozzaAttiva()).length;
   $("c-prev2").disabled = !giornoApertoDa(piuGiorni(d, -1), -1);
   $("c-data").innerHTML = `<span class="t-cap">${esc(d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }))}</span><small>${d.getFullYear()} · ${nBozza ? `${nBozza} ${nBozza === 1 ? "turno" : "turni"} in bozza` : "nessuna modifica in bozza"}</small>`;
-  $("c-corpo").innerHTML = TURNI.map(t => {
+  $("c-corpo").innerHTML = `<div class="crea-settore"><span>Stai scegliendo per:</span>
+      <div class="segmenti piccoli">${Object.entries(SETTORI).map(([k, n]) => `<button type="button" class="seg ${vistoSettore() === k ? "attivo" : ""}" data-crea-settore="${k}">${n}</button>`).join("")}</div></div>` + TURNI.map(t => {
     if (chiusoTurno(d, t)) return `<div class="crea-sez chiusa"><div class="card-testa"><h3>${NOME_TURNO[t]}</h3><span class="dettaglio">Chiuso</span></div></div>`;
     const scelti = inBozza(g, t);
     const { disp, nonDisp, senza } = elenchi(g, t);
     const conta = p => turniNelMese(p.id, d.getFullYear(), d.getMonth(), true);
     // chi ha meno turni nel mese sta più in alto
     const ordina = arr => arr.sort((a, b) => conta(a) - conta(b) || perNome(a, b));
-    const pScelti = scelti.map(profilo).filter(Boolean).sort(perNome);
+    const pScelti = scelti.filter(delSettore).map(profilo).filter(Boolean).sort(perNome);
     const liberi = ordina(disp.filter(p => !scelti.includes(p.id)));
     const altriNo = ordina(nonDisp.filter(p => !scelti.includes(p.id)));
     const altriSenza = ordina(senza.filter(p => !scelti.includes(p.id)));
@@ -974,7 +1049,7 @@ function disegnaCrea() {
       <div class="crea-sez" style="--col:${COL_TURNO[t]}">
         <div class="card-testa"><h3>${NOME_TURNO[t]}</h3>
           ${np ? `<span class="prenotati">${np} <small>prenotati</small></span>` : ""}
-          <span class="crea-riassunto" style="margin-left:auto">${scelti.length} ${scelti.length === 1 ? "persona" : "persone"} · ${pScelti.filter(esperto).length} esperti</span>
+          <span class="crea-riassunto" style="margin-left:auto">${pScelti.length} ${pScelti.length === 1 ? "persona" : "persone"} · ${pScelti.filter(esperto).length} esperti</span>
         </div>
         ${pScelti.length ? `<div class="sez-tit">Scelti</div>${pScelti.map(p => rigaPersona(p, g, t, scelti, d, avvisoDi(p))).join("")}` : ""}
         <div class="sez-tit">Disponibili${liberi.length ? "" : " · nessun altro"}</div>
@@ -985,6 +1060,8 @@ function disegnaCrea() {
   }).join("") + `<p class="pan-nota">Il numero accanto al nome conta i turni del mese, compresi quelli in bozza. Premi <b>Fatto</b> per vedere il resoconto con le ore e scegliere se salvare la bozza o renderla ufficiale.</p>`;
 }
 $("c-corpo").addEventListener("click", e => {
+  const cs = e.target.closest("[data-crea-settore]");
+  if (cs) { settoreVisto = cs.dataset.creaSettore; aggiornaSettore(); disegnaCrea(); return; }
   const b = e.target.closest("[data-scegli]");
   if (!b) return;
   const g = creaGiorno, t = b.dataset.t, id = b.dataset.scegli;
@@ -1044,13 +1121,13 @@ async function resoconto() {
         });
         const h = n.pranzo * o.pranzo + n.cena * o.cena, hPrima = prima.pranzo * o.pranzo + prima.cena * o.cena;
         return { p, n, h, diff: h - hPrima };
-      }).sort((x, y) => y.h - x.h || perNome(x.p, y.p));
+      }).sort((x, y) => settoreDi(x.p).localeCompare(settoreDi(y.p)) || y.h - x.h || perNome(x.p, y.p));
       const tot = righe.reduce((s, x) => s + x.h, 0);
       dlg.querySelector("#rs-tabella").innerHTML = `
         <table class="resoconto">
           <thead><tr><th>${esc(nomeMese(mese))}</th><th>Pranzi</th><th>Cene</th><th>Ore</th></tr></thead>
           <tbody>${righe.map(x => `<tr class="${x.p.id === io ? "io" : ""}">
-            <td>${esc(x.p.nickname)}${sonoAdmin() && esperto(x.p) ? ` <span class="badge">E</span>` : ""}</td>
+            <td>${esc(x.p.nickname)} <span class="badge tipo">${SETTORI[settoreDi(x.p)]}</span>${sonoAdmin() && esperto(x.p) ? ` <span class="badge">E</span>` : ""}</td>
             <td>${x.n.pranzo}</td><td>${x.n.cena}</td>
             <td><b>${testoOre(x.h)}</b>${x.diff ? `<small class="${x.diff > 0 ? "piu" : "meno"}">${x.diff > 0 ? "+" : "−"}${testoOre(Math.abs(x.diff))}</small>` : ""}</td></tr>`).join("")}</tbody>
           <tfoot><tr><td>Totale</td><td>${righe.reduce((s, x) => s + x.n.pranzo, 0)}</td><td>${righe.reduce((s, x) => s + x.n.cena, 0)}</td><td><b>${testoOre(tot)}</b></td></tr></tfoot>
@@ -1126,7 +1203,7 @@ function aggiornaPannello() {
           <span class="tx"><b>${esc(dataLunga(r.giorno))}</b><span class="dettaglio">${NOME_TURNO[r.turno]} · con ${esc(nomiCorti(r.persone.filter(x => x !== io), 4) || "nessun altro")}</span></span>
         </button>`).join("") : `<div class="vuoto">Nessun turno ufficiale in programma.</div>`}</div>`;
   } else if (sezioneAperta === "persone") {
-    const persone = [...D.profili].sort(perNome);
+    const persone = [...D.profili].sort((a, b) => (settoreDi(a) === vistoSettore() ? 0 : 1) - (settoreDi(b) === vistoSettore() ? 0 : 1) || settoreDi(a).localeCompare(settoreDi(b)) || perNome(a, b));
     html = testaPannello("Persone") + `<div class="pan-corpo">
       <p class="pan-nota">Il numero a destra sono i turni di ${esc(nomeMese)}.${sonoAdmin() ? " Tocca una persona per segnarla esperta o non esperta (lo vedi solo tu) o per renderla amministratore." : ""}</p>
       ${persone.map(p => `
@@ -1135,6 +1212,7 @@ function aggiornaPannello() {
           <span class="tx"><b>${esc(p.nickname)}${p.id === io ? " (tu)" : ""}</b>
             <span class="etichette">
               ${p.admin ? `<span class="badge admin">Amministratore</span>` : ""}
+              <span class="badge settore-${settoreDi(p)}">${SETTORI[settoreDi(p)]}</span>
               ${p.finto ? `<span class="badge tipo">Prova</span>` : ""}
               ${sonoAdmin() ? `<span class="badge ${esperto(p) ? "" : "tipo"}">${esperto(p) ? "Esperto" : "Non esperto"}</span>` : ""}
               <span class="badge tipo">${p.tipo === "fisso" ? "Fisso" : "Occasionale"}</span>
@@ -1257,11 +1335,14 @@ function aggiornaFab() {
   fab.hidden = !!selChiusure;
   if (sonoAdmin()) {
     const n = Object.keys(bozzaAttiva()).length;
-    fab.classList.add("esteso");
-    fab.innerHTML = `<span class="piu">📋</span> Crea bozza o turni${n ? ` <span class="bozza-n" title="Turni in bozza">${n} in bozza</span>` : ""}`;
+    fab.classList.remove("esteso");
+    fab.classList.add("admin-tondo");
+    fab.innerHTML = `<span class="ic-fab">📋</span>${n ? `<span class="bozza-punto" title="Turni in bozza">${n}</span>` : ""}`;
+    fab.title = n ? `Crea bozza o turni · ${n} in bozza` : "Crea bozza o turni";
     fab.setAttribute("aria-label", "Crea bozza o turni");
   } else {
-    fab.classList.remove("esteso");
+    fab.classList.remove("esteso", "admin-tondo");
+    fab.title = "Segna più giorni";
     fab.textContent = "+";
     fab.setAttribute("aria-label", "Segna più giorni");
   }
@@ -1270,13 +1351,13 @@ function aggiornaFab() {
 // =====================================================================
 //  FILTRO: tutto / solo i miei turni / quando ci sono
 // =====================================================================
-const NOMI_FILTRO = { miei: "i miei turni", ufficiali: "turni ufficiali" };
+const NOMI_FILTRO = { miei: "i miei turni", ufficiali: "turni ufficiali di sala e cucina", settore: "turni ufficiali" };
 function aggiornaFiltro() {
   const attivo = filtro !== "tutto";
   $("btn-filtro").classList.toggle("filtro-attivo", attivo);
   const chip = $("chip-filtro");
   if (attivo) {
-    chip.innerHTML = `Vedi solo: <b>${NOMI_FILTRO[filtro]}</b> <button type="button" aria-label="Vedi tutto">✕</button>`;
+    chip.innerHTML = `Vedi solo: <b>${NOMI_FILTRO[filtro]}${filtro === "settore" ? " " + SETTORI[vistoSettore()].toLowerCase() : ""}</b> <button type="button" aria-label="Vedi tutto">✕</button>`;
     chip.querySelector("button").onclick = () => { filtro = "tutto"; aggiornaFiltro(); disegna(); };
   }
   chip.hidden = !attivo;
@@ -1286,7 +1367,7 @@ function apriFiltro() {
   finestra("Cosa vuoi vedere?", `
     <div class="filtro-lista" id="f-lista"></div>
     <div class="azioni"><button type="button" class="chip primario" data-azione="ok">Fatto</button></div>`, (d, fatto) => {
-    const voci = [["tutto", "Tutto", "var(--accento)"], ["ufficiali", "Solo i turni ufficiali (di tutti)", "var(--cena)"], ["miei", "Solo i miei turni", "var(--pranzo)"]]; 
+    const voci = [["tutto", "Tutto", "var(--accento)"], ["ufficiali", "Turni ufficiali di tutti (sala e cucina)", "var(--cena)"], ["settore", `Turni ufficiali solo ${SETTORI[vistoSettore()].toLowerCase()}`, "var(--pranzo)"], ["miei", "Solo i miei turni", "var(--mio)"]];
     const disegnaVoci = () => {
       d.querySelector("#f-lista").innerHTML = voci.map(([k, n, c]) => `
         <button type="button" class="voce-filtro ${filtro === k ? "acceso" : ""}" data-f="${k}">
@@ -1313,7 +1394,7 @@ let sceltaProfilo = null;   // { modo: "cerca" | "crea", tipo, modifica, ristora
 function apriProfilo({ modifica = false, annullabile = false } = {}) {
   const p = modifica ? mioProfilo() : null;
   const provaConRistorante = MODALITA_PROVA && !!D.ristorante;
-  sceltaProfilo = { modo: provaConRistorante ? "cerca" : (MODALITA_PROVA ? "crea" : "cerca"), tipo: p ? p.tipo : "", modifica, ristorante: provaConRistorante ? { id: D.ristorante.id, nome: D.ristorante.nome } : null };
+  sceltaProfilo = { modo: provaConRistorante ? "cerca" : (MODALITA_PROVA ? "crea" : "cerca"), tipo: p ? p.tipo : "", settore: p ? settoreDi(p) : "", modifica, ristorante: provaConRistorante ? { id: D.ristorante.id, nome: D.ristorante.nome } : null };
   $("p-intestazione").textContent = modifica ? "Il tuo profilo" : provaConRistorante ? "Nuova persona (prova)" : "Benvenuto in Turni";
   $("p-nota-prova").hidden = !MODALITA_PROVA || modifica;
   $("p-nick").value = p ? p.nickname : "";
@@ -1338,6 +1419,7 @@ function aggiornaFormProfilo() {
   if (provaConRistorante) $("p-pass-wrap").firstChild.textContent = `Password di «${D.ristorante.nome}»`;
   else $("p-pass-wrap").firstChild.textContent = "Password del ristorante";
   document.querySelectorAll("#p-tipo [data-v]").forEach(b => b.classList.toggle("attivo", b.dataset.v === s.tipo));
+  document.querySelectorAll("#p-settore [data-v]").forEach(b => b.classList.toggle("attivo", b.dataset.v === s.settore));
   const p = mioProfilo();
   $("p-nota-ruolo").textContent = s.modifica ? (p && p.admin ? "Sei amministratore." : "Se serve, un amministratore può renderti amministratore.")
     : s.modo === "crea" ? "Chi crea il ristorante è l'amministratore."
@@ -1376,6 +1458,7 @@ $("p-risultati").addEventListener("click", e => {
 });
 $("p-modo").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b) return; sceltaProfilo.modo = b.dataset.v; messaggioProfilo(""); aggiornaFormProfilo(); });
 $("p-tipo").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b) return; sceltaProfilo.tipo = b.dataset.v; aggiornaFormProfilo(); });
+$("p-settore").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b) return; sceltaProfilo.settore = b.dataset.v; aggiornaFormProfilo(); });
 $("p-annulla").addEventListener("click", () => dlgProfilo.close());
 dlgProfilo.addEventListener("cancel", e => { if (!mioProfilo()) e.preventDefault(); });   // senza profilo non si può chiudere
 $("form-profilo").addEventListener("submit", async e => {
@@ -1390,20 +1473,21 @@ $("form-profilo").addEventListener("submit", async e => {
     if (!$("p-pass").value) return messaggioProfilo("Scrivi la password del ristorante.", "errore");
   }
   if (!s.tipo) return messaggioProfilo("Scegli se sei fisso o occasionale.", "errore");
+  if (!s.settore) return messaggioProfilo("Scegli se sei in sala o in cucina.", "errore");
   if (nick.length < 2) return messaggioProfilo("Scegli un nickname (almeno 2 lettere).", "errore");
   if (D.profili.some(p => p.nickname.toLowerCase() === nick.toLowerCase() && p.id !== (s.modifica ? io : null)))
     return messaggioProfilo("Questo nickname c'è già: scegline un altro.", "errore");
 
   if (MODALITA_PROVA) {
-    if (s.modifica) { Object.assign(mioProfilo(), { nickname: nick, tipo: s.tipo }); }
+    if (s.modifica) { Object.assign(mioProfilo(), { nickname: nick, tipo: s.tipo, settore: s.settore }); }
     else {
       const id = nuovoId();
       if (s.modo === "crea") {
         D.ristorante = { id: "prova", nome: $("p-nome").value.trim(), password: $("p-pass-nuova").value, creato_da: id };
-        D.profili.push({ id, nickname: nick, tipo: s.tipo, admin: true, esperto: true });
+        D.profili.push({ id, nickname: nick, tipo: s.tipo, settore: s.settore, admin: true, esperto: true });
       } else {
         if (D.ristorante.password && $("p-pass").value !== D.ristorante.password) return messaggioProfilo("Password del ristorante sbagliata.", "errore");
-        D.profili.push({ id, nickname: nick, tipo: s.tipo, admin: false, esperto: false });
+        D.profili.push({ id, nickname: nick, tipo: s.tipo, settore: s.settore, admin: false, esperto: false });
       }
       io = id; salvaIo();
     }
@@ -1411,9 +1495,9 @@ $("form-profilo").addEventListener("submit", async e => {
   } else {
     $("p-ok").disabled = true;
     messaggioProfilo("Un attimo…");
-    const errore = s.modifica ? await window.cloudModificaProfilo(nick, s.tipo)
-      : s.modo === "crea" ? await window.cloudCreaRistorante($("p-nome").value.trim(), $("p-pass-nuova").value, nick, s.tipo)
-      : await window.cloudUnisciti(s.ristorante.id, $("p-pass").value, nick, s.tipo);
+    const errore = s.modifica ? await window.cloudModificaProfilo(nick, s.tipo, s.settore)
+      : s.modo === "crea" ? await window.cloudCreaRistorante($("p-nome").value.trim(), $("p-pass-nuova").value, nick, s.tipo, s.settore)
+      : await window.cloudUnisciti(s.ristorante.id, $("p-pass").value, nick, s.tipo, s.settore);
     $("p-ok").disabled = false;
     if (errore) return messaggioProfilo(errore, "errore");
   }
@@ -1511,6 +1595,7 @@ $("imp-profilo").addEventListener("click", () => { dlgImp.close(); apriProfilo({
 $("imp-cambia").addEventListener("click", cambiaUtente);
 $("imp-esempio").addEventListener("click", personeDiEsempio);
 $("imp-azzera").addEventListener("click", azzeraProva);
+$("imp-pdf").addEventListener("click", () => { dlgImp.close(); stampaMese(); });
 $("imp-elimina-prova").addEventListener("click", eliminaPersoneProva);
 $("imp-codici").addEventListener("click", async () => {
   dlgImp.close();
@@ -1538,9 +1623,42 @@ $("imp-codici").addEventListener("click", async () => {
   });
   if (r === "cambiata") avviso("Password cambiata", "Chi è già dentro resta dentro. I nuovi colleghi dovranno usare la password nuova.");
 });
+// PDF del mese: tabella semplice in bianco e nero (pranzi, cene, prenotati) per chi non ha l'app.
+// Si apre la stampa del telefono / computer: lì si sceglie "Salva come PDF" o si condivide.
+function stampaMese() {
+  const base = vista === "anno" ? oggiMezzanotte() : dataCorrente;
+  const anno = base.getFullYear(), mese = base.getMonth();
+  const nomeMese = new Date(anno, mese, 1).toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+  const giorni = new Date(anno, mese + 1, 0).getDate();
+  const nomi = ids => ids.map(nomeDi).sort((a, b) => a.localeCompare(b, "it")).join(", ");
+  const cella = (k, d, t) => {
+    if (chiusoTurno(d, t)) return `<td class="chiuso">CHIUSO</td>`;
+    const ids = ufficiali(k, t).filter(id => profilo(id));
+    const sala = ids.filter(id => settoreDi(profilo(id)) === "sala"), cucina = ids.filter(id => settoreDi(profilo(id)) === "cucina");
+    if (!ids.length) return `<td class="vuoto">—</td>`;
+    return `<td>${sala.length ? `<div><b>Sala:</b> ${esc(nomi(sala))}</div>` : ""}${cucina.length ? `<div><b>Cucina:</b> ${esc(nomi(cucina))}</div>` : ""}</td>`;
+  };
+  let righe = "";
+  for (let n = 1; n <= giorni; n++) {
+    const d = new Date(anno, mese, n), k = chiaveData(d);
+    const pr = TURNI.filter(t => !chiusoTurno(d, t) && prenotati(k, t)).map(t => `${t === "pranzo" ? "P" : "C"} ${prenotati(k, t)}`).join(" · ");
+    righe += `<tr><td class="data">${esc(d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric" }))}</td>${cella(k, d, "pranzo")}${cella(k, d, "cena")}<td class="pren">${pr || ""}</td></tr>`;
+  }
+  $("stampa").innerHTML = `
+    <h1>Turni · ${esc(D.ristorante ? D.ristorante.nome : "")} · ${esc(nomeMese)}</h1>
+    <table>
+      <colgroup><col class="c-data"><col class="c-turno"><col class="c-turno"><col class="c-pren"></colgroup>
+      <thead><tr><th>Giorno</th><th>Pranzo</th><th>Cena</th><th>Prenotati</th></tr></thead>
+      <tbody>${righe}</tbody>
+    </table>
+    <p class="piede">Solo turni ufficiali · stampato il ${esc(new Date().toLocaleDateString("it-IT"))}</p>`;
+  const titolo = document.title;
+  document.title = `Turni ${nomeMese}`;   // diventa il nome del file PDF
+  setTimeout(() => { window.print(); setTimeout(() => { document.title = titolo; }, 500); }, 50);
+}
 function aggiornaImpostazioni() {
   const p = mioProfilo();
-  $("imp-profilo-testo").textContent = p ? `${p.nickname} · ${p.tipo === "fisso" ? "fisso" : "occasionale"}${p.admin ? " · amministratore" : ""}` : "";
+  $("imp-profilo-testo").textContent = p ? `${p.nickname} · ${SETTORI[settoreDi(p)].toLowerCase()} · ${p.tipo === "fisso" ? "fisso" : "occasionale"}${p.admin ? " · amministratore" : ""}` : "";
   $("btn-account").hidden = MODALITA_PROVA;
 }
 
@@ -1674,10 +1792,10 @@ function disegna() {
   document.body.classList.toggle("admin", sonoAdmin());
   document.body.classList.toggle("prova", MODALITA_PROVA);
   document.body.classList.toggle("creatore", !MODALITA_PROVA && sonoCreatore());
+  document.body.classList.toggle("ha-finti", D.profili.some(p => p.finto));
   aggiornaChipPersona();
   const nome = D.ristorante ? D.ristorante.nome : "";
-  $("nome-ristorante").textContent = nome ? iniziale(nome) : "";
-  $("nome-ristorante").title = nome;
+  aggiornaSettore();
   document.title = nome ? `Turni · ${nome}` : "Turni";
   if (vista === "anno") disegnaAnno();
   else if (vista === "mese") disegnaMese();
@@ -1699,6 +1817,7 @@ function ridisegnaTutto() {
   }, 60);
 }
 function avvioCompleto() {
+  settoreVisto = mioProfilo() ? settoreDi(mioProfilo()) : null;
   // il profilo potrebbe non esserci più (es. dati di prova cancellati)
   if (!mioProfilo()) {
     if (MODALITA_PROVA) { if (io && !D.profili.length) { io = null; salvaIo(); } apriProfilo(); }

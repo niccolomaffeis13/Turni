@@ -26,6 +26,13 @@ create table if not exists public.profili (
   aggiornato    timestamptz not null default now()
 );
 create unique index if not exists profili_nickname on public.profili (ristorante_id, lower(nickname));
+-- settore: sala o cucina (chi c'era già passa in cucina)
+alter table public.profili add column if not exists settore text not null default 'cucina';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'profili_settore_check') then
+    alter table public.profili add constraint profili_settore_check check (settore in ('sala', 'cucina'));
+  end if;
+end $$;
 
 -- Esperto / non esperto: promemoria dell'amministratore, gli altri NON lo possono leggere
 create table if not exists public.esperti (
@@ -47,6 +54,9 @@ create table if not exists public.disponibilita (
   primary key (user_id, giorno, turno)
 );
 create index if not exists disponibilita_rist on public.disponibilita (ristorante_id, giorno);
+-- orario in cui ci sei ('' = inizio / fine turno)
+alter table public.disponibilita add column if not exists dalle text not null default '';
+alter table public.disponibilita add column if not exists alle text not null default '';
 
 -- Chiusure del ristorante (con ripetizione e giorni riaperti uno per uno)
 create table if not exists public.chiusure (
@@ -184,8 +194,13 @@ grant select, insert, update on public.bozze, public.impostazioni to authenticat
 grant select, insert, update on public.disponibilita, public.chiusure, public.prenotati, public.turni to authenticated;
 
 -- 4) Funzioni chiamate dall'app ---------------------------------------------
+-- (le versioni precedenti, senza il settore, si tolgono)
+drop function if exists public.crea_ristorante(text, text, text, text);
+drop function if exists public.unisciti(uuid, text, text, text);
+drop function if exists public.modifica_profilo(text, text);
+
 -- Crea un ristorante con nome e password: chi lo crea è amministratore
-create or replace function public.crea_ristorante(p_nome text, p_password text, p_nickname text, p_tipo text)
+create or replace function public.crea_ristorante(p_nome text, p_password text, p_nickname text, p_tipo text, p_settore text)
 returns json language plpgsql security definer set search_path = public, extensions as $$
 declare r_id uuid;
 begin
@@ -197,7 +212,8 @@ begin
   if length(trim(coalesce(p_nickname, ''))) < 2 then raise exception 'Scegli un nickname'; end if;
   if exists (select 1 from ristoranti where lower(nome) = lower(trim(p_nome))) then raise exception 'Esiste già un ristorante con questo nome: scegline un altro'; end if;
   insert into ristoranti (nome, password_hash, creato_da) values (trim(p_nome), crypt(p_password, gen_salt('bf')), auth.uid()) returning id into r_id;
-  insert into profili (user_id, ristorante_id, nickname, tipo, admin) values (auth.uid(), r_id, trim(p_nickname), p_tipo, true);
+  if p_settore not in ('sala', 'cucina') then raise exception 'Scegli sala o cucina'; end if;
+  insert into profili (user_id, ristorante_id, nickname, tipo, admin, settore) values (auth.uid(), r_id, trim(p_nickname), p_tipo, true, p_settore);
   return json_build_object('ristorante_id', r_id);
 end $$;
 
@@ -211,7 +227,7 @@ returns table (id uuid, nome text) language sql stable security definer set sear
 $$;
 
 -- Entra in un ristorante con la password: si entra sempre come NON amministratore
-create or replace function public.unisciti(p_ristorante uuid, p_password text, p_nickname text, p_tipo text)
+create or replace function public.unisciti(p_ristorante uuid, p_password text, p_nickname text, p_tipo text, p_settore text)
 returns json language plpgsql security definer set search_path = public, extensions as $$
 declare r ristoranti%rowtype;
 begin
@@ -225,7 +241,8 @@ begin
     perform pg_sleep(1);   -- rallenta chi prova password a caso
     raise exception 'Password del ristorante sbagliata';
   end if;
-  insert into profili (user_id, ristorante_id, nickname, tipo, admin) values (auth.uid(), r.id, trim(p_nickname), p_tipo, false);
+  if p_settore not in ('sala', 'cucina') then raise exception 'Scegli sala o cucina'; end if;
+  insert into profili (user_id, ristorante_id, nickname, tipo, admin, settore) values (auth.uid(), r.id, trim(p_nickname), p_tipo, false, p_settore);
   return json_build_object('ristorante_id', r.id);
 end $$;
 
@@ -250,12 +267,13 @@ begin
 end $$;
 
 -- Cambia il proprio nickname e la tipologia
-create or replace function public.modifica_profilo(p_nickname text, p_tipo text)
+create or replace function public.modifica_profilo(p_nickname text, p_tipo text, p_settore text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if p_tipo not in ('fisso', 'occasionale') then raise exception 'Tipologia non valida'; end if;
   if length(trim(coalesce(p_nickname, ''))) < 2 then raise exception 'Scegli un nickname'; end if;
-  update profili set nickname = trim(p_nickname), tipo = p_tipo, aggiornato = now() where user_id = auth.uid();
+  if p_settore not in ('sala', 'cucina') then raise exception 'Scegli sala o cucina'; end if;
+  update profili set nickname = trim(p_nickname), tipo = p_tipo, settore = p_settore, aggiornato = now() where user_id = auth.uid();
 end $$;
 
 -- Solo l'amministratore decide chi è esperto (l'amministratore lo è sempre)
@@ -308,20 +326,20 @@ returns json language sql stable security definer set search_path = public as $$
   from ristoranti r where r.id = mio_ristorante()
 $$;
 
-revoke all on function public.crea_ristorante(text, text, text, text) from public, anon;
+revoke all on function public.crea_ristorante(text, text, text, text, text) from public, anon;
 revoke all on function public.cerca_ristoranti(text) from public, anon;
-revoke all on function public.unisciti(uuid, text, text, text) from public, anon;
+revoke all on function public.unisciti(uuid, text, text, text, text) from public, anon;
 revoke all on function public.imposta_admin(uuid, boolean) from public, anon;
 revoke all on function public.cambia_password_ristorante(text) from public, anon;
-revoke all on function public.modifica_profilo(text, text) from public, anon;
+revoke all on function public.modifica_profilo(text, text, text) from public, anon;
 revoke all on function public.imposta_esperto(uuid, boolean) from public, anon;
 revoke all on function public.info_ristorante() from public, anon;
 revoke all on function public.crea_persone_prova() from public, anon;
 revoke all on function public.elimina_persone_prova() from public, anon;
 grant execute on function public.crea_persone_prova(), public.elimina_persone_prova() to authenticated;
-grant execute on function public.crea_ristorante(text, text, text, text), public.cerca_ristoranti(text), public.unisciti(uuid, text, text, text),
+grant execute on function public.crea_ristorante(text, text, text, text, text), public.cerca_ristoranti(text), public.unisciti(uuid, text, text, text, text),
   public.imposta_admin(uuid, boolean), public.cambia_password_ristorante(text),
-  public.modifica_profilo(text, text), public.imposta_esperto(uuid, boolean), public.info_ristorante() to authenticated;
+  public.modifica_profilo(text, text, text), public.imposta_esperto(uuid, boolean), public.info_ristorante() to authenticated;
 
 -- 5) Aggiornamento in tempo reale tra colleghi ------------------------------
 do $$

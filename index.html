@@ -69,7 +69,7 @@
   <!-- ============ Barra in alto (resta fissa) ============ -->
   <header class="topbar">
     <div class="barra-titolo">
-      <span id="nome-ristorante" class="nome-rist" title=""></span>
+      <button type="button" id="btn-settore" class="btn-settore" hidden></button>
       <div class="nav">
         <button id="btn-prev" class="freccia" aria-label="Indietro"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
         <h1 id="titolo"></h1>
@@ -163,17 +163,22 @@
       <span class="testo-imp"><b>Far entrare i colleghi</b><small>Nome e password del ristorante · cambia password</small></span>
       <span class="freccina">›</span>
     </button>
-    <button type="button" class="riga-imp solo-prova solo-creatore" id="imp-cambia">
+    <button type="button" class="riga-imp" id="imp-pdf">
+      <span class="ic-imp">📄</span>
+      <span class="testo-imp"><b>Scarica PDF turni del mese</b><small>Tabella in bianco e nero da mandare a chi non ha l'app</small></span>
+      <span class="freccina">›</span>
+    </button>
+    <button type="button" class="riga-imp solo-prova" id="imp-cambia">
       <span class="ic-imp">🔁</span>
       <span class="testo-imp"><b>Cambia persona (prova)</b><small>Usa l'app come se fossi una delle persone di prova</small></span>
       <span class="freccina">›</span>
     </button>
-    <button type="button" class="riga-imp solo-prova solo-creatore" id="imp-esempio">
+    <button type="button" class="riga-imp solo-prova" id="imp-esempio">
       <span class="ic-imp">🧪</span>
       <span class="testo-imp"><b>Aggiungi 6 persone di prova</b><small>6 colleghi fissi finti, per provare i turni anche in pochi</small></span>
       <span class="freccina">›</span>
     </button>
-    <button type="button" class="riga-imp solo-creatore" id="imp-elimina-prova">
+    <button type="button" class="riga-imp solo-finti" id="imp-elimina-prova">
       <span class="ic-imp">🧹</span>
       <span class="testo-imp"><b>Elimina le persone di prova</b><small>Le toglie anche dai turni e dalle bozze</small></span>
       <span class="freccina">›</span>
@@ -215,6 +220,13 @@
           <button type="button" data-v="occasionale"><b>Occasionale</b><small>Segni sia quando ci sei sia quando non ci sei</small></button>
         </div>
       </div>
+      <div class="campo">
+        <span>Settore</span>
+        <div class="scelta-card" id="p-settore">
+          <button type="button" data-v="sala"><b>Sala</b><small>Camerieri, bar, accoglienza</small></button>
+          <button type="button" data-v="cucina"><b>Cucina</b><small>Cuochi, aiuto cucina, lavaggio</small></button>
+        </div>
+      </div>
       <label>Nickname<input id="p-nick" maxlength="20" placeholder="Il nome che vedono gli altri (es. Nico)" autocomplete="off"></label>
       <p class="nota" id="p-nota-ruolo" style="margin-top:-6px"></p>
       <p class="acc-messaggio nota" id="p-msg"></p>
@@ -254,6 +266,9 @@
       </div>
     </div>
   </dialog>
+
+  <!-- Tabella per il PDF del mese (si vede solo in stampa) -->
+  <div id="stampa"></div>
 
   <!-- Impostazioni di collegamento (Supabase): si compilano in config.js -->
   <script src="config.js"></script>

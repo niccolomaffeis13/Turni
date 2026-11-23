@@ -16,7 +16,7 @@
 
   const K_CODA = "turni-coda";                 // modifiche fatte qui e non ancora inviate
   const COLONNE = {
-    disponibilita: ["ristorante_id", "user_id", "giorno", "turno", "stato", "aggiornato"],
+    disponibilita: ["ristorante_id", "user_id", "giorno", "turno", "stato", "dalle", "alle", "aggiornato"],
     chiusure: ["id", "ristorante_id", "dal", "al", "fino", "turno", "ripeti", "saltate", "nota", "eliminata", "aggiornato"],
     prenotati: ["ristorante_id", "giorno", "turno", "numero", "aggiornato"],
     turni: ["ristorante_id", "giorno", "turno", "persone", "aggiornato"],
@@ -56,7 +56,8 @@
     clearTimeout(timerInvio);
     timerInvio = setTimeout(invia, 600);
   };
-  const soloColonne = (tab, r) => Object.fromEntries(COLONNE[tab].map(c => [c, c === "al" || c === "fino" ? (r[c] || null) : r[c]]));
+  const soloColonne = (tab, r) => Object.fromEntries(COLONNE[tab].map(c => [c, c === "al" || c === "fino" ? (r[c] || null) : (c === "dalle" || c === "alle") ? (r[c] || "") : r[c]]));
+  let senzaOrari = false;   // se il database non ha ancora le colonne dell'orario, si invia senza
 
   let inviando = false;
   async function invia() {
@@ -71,8 +72,14 @@
       for (const tab of Object.keys(COLONNE)) {
         const gruppo = voci.filter(([, v]) => v.tab === tab);
         if (!gruppo.length) continue;
-        const righe = gruppo.map(([, v]) => soloColonne(tab, v.riga));
-        const { error } = await sb.from(tab).upsert(righe, { onConflict: CONFLITTO[tab] });
+        let righe = gruppo.map(([, v]) => soloColonne(tab, v.riga));
+        if (tab === "disponibilita" && senzaOrari) righe = righe.map(({ dalle, alle, ...resto }) => resto);
+        let { error } = await sb.from(tab).upsert(righe, { onConflict: CONFLITTO[tab] });
+        if (error && tab === "disponibilita" && !senzaOrari && /dalle|alle|PGRST204/i.test((error.message || "") + error.code)) {
+          console.warn("Il database non ha ancora l'orario: rilancia supabase-setup.sql");
+          senzaOrari = true;
+          ({ error } = await sb.from(tab).upsert(righe.map(({ dalle, alle, ...resto }) => resto), { onConflict: CONFLITTO[tab] }));
+        }
         if (error) {
           console.warn("Invio non riuscito", tab, error);
           // permesso negato (es. non sei più amministratore): inutile riprovare all'infinito
@@ -94,7 +101,7 @@
   // "esperto" non è nel profilo: arriva da una tabella che può leggere solo l'amministratore
   const profiloDaRiga = r => {
     const prima = D.profili.find(x => x.id === r.user_id);
-    return { id: r.user_id, nickname: r.nickname, tipo: r.tipo, admin: !!r.admin, finto: !!r.finto, esperto: !!(prima && prima.esperto) };
+    return { id: r.user_id, nickname: r.nickname, tipo: r.tipo, settore: r.settore === "sala" ? "sala" : "cucina", admin: !!r.admin, finto: !!r.finto, esperto: !!(prima && prima.esperto) };
   };
   // Supabase restituisce al massimo 1000 righe per volta: le chiede a pezzi
   async function tutte(tab, filtra = q => q) {
@@ -237,18 +244,18 @@
     await caricaProfilo();
     return null;
   }
-  window.cloudCreaRistorante = async (nome, password, nick, tipo) => {
+  window.cloudCreaRistorante = async (nome, password, nick, tipo, settore) => {
     if (!navigator.onLine) return "Serve internet per creare il ristorante.";
-    return dopoProfilo(await sb.rpc("crea_ristorante", { p_nome: nome, p_password: password, p_nickname: nick, p_tipo: tipo }));
+    return dopoProfilo(await sb.rpc("crea_ristorante", { p_nome: nome, p_password: password, p_nickname: nick, p_tipo: tipo, p_settore: settore }));
   };
   window.cloudCercaRistoranti = async testo => {
     if (!navigator.onLine) return "Serve internet per cercare il ristorante.";
     const { data, error } = await sb.rpc("cerca_ristoranti", { p_testo: testo });
     return error ? traduciErrore(error) : (data || []);
   };
-  window.cloudUnisciti = async (idRistorante, password, nick, tipo) => {
+  window.cloudUnisciti = async (idRistorante, password, nick, tipo, settore) => {
     if (!navigator.onLine) return "Serve internet per entrare nel ristorante.";
-    return dopoProfilo(await sb.rpc("unisciti", { p_ristorante: idRistorante, p_password: password, p_nickname: nick, p_tipo: tipo }));
+    return dopoProfilo(await sb.rpc("unisciti", { p_ristorante: idRistorante, p_password: password, p_nickname: nick, p_tipo: tipo, p_settore: settore }));
   };
   window.cloudImpostaAdmin = async (uid, valore) => {
     if (!navigator.onLine) return "Serve internet per cambiare gli amministratori.";
@@ -276,11 +283,11 @@
     const r = await sb.rpc("cambia_password_ristorante", { p_password: pw });
     return r.error ? traduciErrore(r.error) : null;
   };
-  window.cloudModificaProfilo = async (nick, tipo) => {
+  window.cloudModificaProfilo = async (nick, tipo, settore) => {
     if (!navigator.onLine) return "Serve internet per cambiare il profilo.";
-    const r = await sb.rpc("modifica_profilo", { p_nickname: nick, p_tipo: tipo });
+    const r = await sb.rpc("modifica_profilo", { p_nickname: nick, p_tipo: tipo, p_settore: settore });
     if (r.error) return traduciErrore(r.error);
-    Object.assign(mioProfilo(), { nickname: nick, tipo }); salvaDati();
+    Object.assign(mioProfilo(), { nickname: nick, tipo, settore }); salvaDati();
     return null;
   };
   window.cloudImpostaEsperto = async (uid, valore) => {

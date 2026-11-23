@@ -393,3 +393,67 @@ table.resoconto { width: 100%; border-collapse: collapse; font-size: 14px; margi
 .rb.si.attivo { background: var(--si); border-color: var(--si); color: #fff; }
 .rb.no.attivo { background: var(--no); border-color: var(--no); color: #fff; }
 .rb:not(.attivo) { color: var(--tenue); }
+
+/* =====================================================================
+   ORARIO DI DISPONIBILITÀ e PULSANTE TONDO
+   ===================================================================== */
+.rb.orario { color: var(--testo); background: var(--campo); border-color: transparent; font-weight: 700; }
+.rb.orario.impostato { background: color-mix(in srgb, var(--accento) 12%, var(--carta)); color: var(--accento); border-color: color-mix(in srgb, var(--accento) 35%, transparent); }
+.rb.orario .freccia-giu { font-size: 10px; opacity: .7; }
+.card-testa .risposta { flex-wrap: wrap; }
+.orario-pers {
+  font-size: 11px; font-weight: 800; color: var(--accento); margin-left: 6px;
+  background: color-mix(in srgb, var(--accento) 11%, transparent); border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+}
+.fab.admin-tondo { width: 48px; height: 48px; border-radius: 50%; padding: 0; font-size: 21px; display: grid; place-items: center; }
+.fab.admin-tondo .ic-fab { line-height: 1; }
+.fab.admin-tondo .bozza-punto {
+  position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; border-radius: 999px; padding: 0 5px;
+  background: var(--sole); color: #14223b; font-size: 11px; font-weight: 800; display: grid; place-items: center;
+  box-shadow: 0 0 0 2px var(--carta);
+}
+
+/* =====================================================================
+   SALA / CUCINA
+   ===================================================================== */
+.barra-titolo { grid-template-columns: 1fr auto 1fr !important; }
+.barra-titolo > :first-child { justify-self: start; }
+.barra-titolo > :last-child { justify-self: end; }
+.btn-settore {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px 0 12px; border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--accento) 30%, transparent);
+  background: color-mix(in srgb, var(--accento) 10%, var(--carta)); color: var(--accento);
+  font-weight: 800; font-size: 14px; font-family: var(--font-titoli);
+}
+.btn-settore .set-cambia { font-size: 13px; opacity: .75; }
+.btn-settore.altro { background: var(--sole); border-color: color-mix(in srgb, var(--sole) 70%, #000); color: #14223b; }
+@media (max-width: 600px) { .btn-settore { height: 30px; padding: 0 8px 0 10px; font-size: 13px; } }
+.badge.settore-sala { background: color-mix(in srgb, var(--cena) 15%, transparent); color: var(--cena); }
+.badge.settore-cucina { background: color-mix(in srgb, var(--pranzo) 15%, transparent); color: var(--pranzo); }
+.altro-settore { font-size: 12.5px; color: var(--tenue); margin-top: 8px; }
+.crea-settore { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 12px; font-size: 13px; font-weight: 700; color: var(--tenue); }
+.solo-finti { display: none !important; }
+body.creatore.ha-finti .solo-finti { display: flex !important; }
+
+/* =====================================================================
+   PDF DEL MESE: si vede solo in stampa, bianco e nero
+   ===================================================================== */
+#stampa { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  html, body { background: #fff !important; padding: 0 !important; margin: 0 !important; width: auto !important; min-width: 0 !important; overflow: visible !important; }
+  #stampa table { table-layout: fixed; width: calc(100% - 2px) !important; }
+  #stampa col.c-data { width: 11%; } #stampa col.c-turno { width: 37%; } #stampa col.c-pren { width: 15%; }
+  body > *:not(#stampa) { display: none !important; }
+  #stampa { display: block !important; color: #000; font-family: Arial, Helvetica, sans-serif; }
+  #stampa h1 { font-size: 16pt; margin: 0 0 8px; text-transform: none; }
+  #stampa table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  #stampa th, #stampa td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; text-align: left; }
+  #stampa th { background: #fff; font-weight: bold; }
+  #stampa td.data { white-space: nowrap; width: 12%; text-transform: capitalize; }
+  #stampa td.pren { white-space: nowrap; width: 13%; }
+  #stampa td.chiuso { font-weight: bold; letter-spacing: .05em; }
+  #stampa td.vuoto { color: #000; }
+  #stampa tr { page-break-inside: avoid; }
+  #stampa .piede { font-size: 8pt; margin-top: 6px; }
+}
