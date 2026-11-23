@@ -165,7 +165,7 @@
     </button>
     <button type="button" class="riga-imp" id="imp-pdf">
       <span class="ic-imp">📄</span>
-      <span class="testo-imp"><b>Scarica PDF turni del mese</b><small>Tabella in bianco e nero da mandare a chi non ha l'app</small></span>
+      <span class="testo-imp"><b>Scarica PDF turni del mese</b><small>Calendario del mese da appendere o mandare a chi non ha l'app</small></span>
       <span class="freccina">›</span>
     </button>
     <button type="button" class="riga-imp solo-prova" id="imp-cambia">
@@ -267,11 +267,9 @@
     </div>
   </dialog>
 
-  <!-- Tabella per il PDF del mese (si vede solo in stampa) -->
-  <div id="stampa"></div>
-
   <!-- Impostazioni di collegamento (Supabase): si compilano in config.js -->
   <script src="config.js"></script>
+  <script src="pdf-calendario.js"></script>
   <script src="app.js"></script>
   <!-- Libreria di Supabase (se sei offline non si carica, e l'app funziona lo stesso) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>

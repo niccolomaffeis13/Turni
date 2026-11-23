@@ -104,7 +104,9 @@ const esperto = p => !!(p && (p.admin || p.esperto));   // l'amministratore è s
 const SETTORI = { sala: "Sala", cucina: "Cucina" };
 const settoreDi = p => (p && p.settore === "sala" ? "sala" : "cucina");
 let settoreVisto = null;   // il settore che stai guardando; all'apertura è sempre il tuo
-const vistoSettore = () => settoreVisto || settoreDi(mioProfilo());
+// tutti (anche gli amministratori) vedono solo il proprio settore; per cambiarlo: Impostazioni → Il tuo profilo.
+// L'altro settore si vede solo col filtro "Turni ufficiali di tutti".
+const vistoSettore = () => settoreDi(mioProfilo());
 const delSettore = id => !!profilo(id) && settoreDi(profilo(id)) === vistoSettore();
 const iniziale = n => (n || "?").trim().charAt(0).toUpperCase();
 const perNome = (a, b) => a.nickname.localeCompare(b.nickname, "it", { sensitivity: "base" });
@@ -532,7 +534,7 @@ function disegnaAnteprima() {
   } else {
     corpo = TURNI.map(t => {
       if (chiusoTurno(d, t)) return `<div class="ant-turno" style="--col:var(--chiuso)"><span class="ant-barra" style="background:var(--chiuso)"></span><span class="ant-testo"><span class="ant-tit">${NOME_TURNO[t]}</span><span class="ant-sotto">Chiuso</span></span><span></span></div>`;
-      const uff = ufficiali(g, t).filter(delSettore), { disp } = elenchi(g, t);
+      const uff = filtro === "ufficiali" ? ufficiali(g, t) : ufficiali(g, t).filter(delSettore), { disp } = elenchi(g, t);
       const sotto = uff.includes(io)
         ? `<span class="sei-di-turno">★ Sei di turno</span> ${uff.length > 1 ? `con ${esc(nomiCorti(uff.filter(x => x !== io), 5))}` : ""}`
         : uff.length
@@ -592,7 +594,7 @@ function disegnaGiorno() {
         <div class="sez-tit riga-uff">${uff.length ? `Turno ufficiale ${SETTORI[vistoSettore()].toLowerCase()} · ${uff.length} ${uff.length === 1 ? "persona" : "persone"}${sonoAdmin() ? ` · ${espertiUff} esperti` : ""}` : "Turno ufficiale · non ancora fatto"}
           ${sonoAdmin() ? `<button type="button" class="mod-turni" data-modifica-turni>✏️ ${uff.length ? "Modifica" : "Crea"}</button>` : ""}</div>
         ${uff.length ? `<div class="persone">${pUff.map(p => chipPersona(p, g, { ufficiale: true, t })).join("")}</div>` : ""}
-        ${uffAltro.length ? `<div class="altro-settore">In ${SETTORI[altroSettore].toLowerCase()}: ${esc(nomiCorti(uffAltro, 8))}</div>` : ""}
+        ${filtro === "ufficiali" && uffAltro.length ? `<div class="altro-settore">In ${SETTORI[altroSettore].toLowerCase()}: ${esc(nomiCorti(uffAltro, 8))}</div>` : ""}
         ${filtro === "ufficiali" || filtro === "settore" ? "" : `<div class="sez-tit">${uff.length ? "Altri disponibili" : "Disponibili"} (${altri.length})</div>
         <div class="persone">${altri.length ? altri.sort(perNome).map(p => chipPersona(p, g, { t })).join("") : `<span class="vuoto-piccolo">${uff.length ? "Nessun altro" : "Nessuno ha detto che c'è"}</span>`}</div>`}
       </div>`;
@@ -610,11 +612,14 @@ function aggiornaSettore() {
   const b = $("btn-settore");
   if (!b) return;
   b.hidden = !mioProfilo();
-  b.innerHTML = `<span class="set-nome">${SETTORI[vistoSettore()]}</span><span class="set-cambia">⇄</span>`;
-  b.title = `Stai guardando: ${SETTORI[vistoSettore()].toLowerCase()} · tocca per cambiare` + (D.ristorante ? ` · ${D.ristorante.nome}` : "");
+  const puoCambiare = false;
+  b.innerHTML = `<span class="set-nome">${SETTORI[vistoSettore()]}</span>${puoCambiare ? `<span class="set-cambia">⇄</span>` : ""}`;
+  b.title = (puoCambiare ? `Stai guardando: ${SETTORI[vistoSettore()].toLowerCase()} · tocca per cambiare` : `Il tuo settore: ${SETTORI[vistoSettore()].toLowerCase()} · si cambia da Impostazioni → Il tuo profilo`) + (D.ristorante ? ` · ${D.ristorante.nome}` : "");
+  b.classList.toggle("bloccato", !puoCambiare);
   b.classList.toggle("altro", vistoSettore() !== settoreDi(mioProfilo()));
 }
 $("btn-settore").addEventListener("click", () => {
+  return;   // il settore si cambia solo dal profilo
   settoreVisto = vistoSettore() === "sala" ? "cucina" : "sala";
   aggiornaFiltro(); disegna(); aggiornaPannello();
 });
@@ -1035,8 +1040,7 @@ function disegnaCrea() {
   const nBozza = Object.keys(bozzaAttiva()).length;
   $("c-prev2").disabled = !giornoApertoDa(piuGiorni(d, -1), -1);
   $("c-data").innerHTML = `<span class="t-cap">${esc(d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }))}</span><small>${d.getFullYear()} · ${nBozza ? `${nBozza} ${nBozza === 1 ? "turno" : "turni"} in bozza` : "nessuna modifica in bozza"}</small>`;
-  $("c-corpo").innerHTML = `<div class="crea-settore"><span>Stai scegliendo per:</span>
-      <div class="segmenti piccoli">${Object.entries(SETTORI).map(([k, n]) => `<button type="button" class="seg ${vistoSettore() === k ? "attivo" : ""}" data-crea-settore="${k}">${n}</button>`).join("")}</div></div>` + TURNI.map(t => {
+  $("c-corpo").innerHTML = `<div class="crea-settore"><span>Turni di: <b>${SETTORI[vistoSettore()].toLowerCase()}</b></span></div>` + TURNI.map(t => {
     if (chiusoTurno(d, t)) return `<div class="crea-sez chiusa"><div class="card-testa"><h3>${NOME_TURNO[t]}</h3><span class="dettaglio">Chiuso</span></div></div>`;
     const scelti = inBozza(g, t);
     const { disp, nonDisp, senza } = elenchi(g, t);
@@ -1599,7 +1603,7 @@ $("imp-profilo").addEventListener("click", () => { dlgImp.close(); apriProfilo({
 $("imp-cambia").addEventListener("click", cambiaUtente);
 $("imp-esempio").addEventListener("click", personeDiEsempio);
 $("imp-azzera").addEventListener("click", azzeraProva);
-$("imp-pdf").addEventListener("click", () => { dlgImp.close(); stampaMese(); });
+$("imp-pdf").addEventListener("click", () => { dlgImp.close(); scegliMesePDF(); });
 $("imp-elimina-prova").addEventListener("click", eliminaPersoneProva);
 $("imp-codici").addEventListener("click", async () => {
   dlgImp.close();
@@ -1627,38 +1631,49 @@ $("imp-codici").addEventListener("click", async () => {
   });
   if (r === "cambiata") avviso("Password cambiata", "Chi è già dentro resta dentro. I nuovi colleghi dovranno usare la password nuova.");
 });
-// PDF del mese: tabella semplice in bianco e nero (pranzi, cene, prenotati) per chi non ha l'app.
-// Si apre la stampa del telefono / computer: lì si sceglie "Salva come PDF" o si condivide.
-function stampaMese() {
+// PDF del mese: calendario da parete (lun → dom) con chi è di turno, sala e cucina.
+// Si sceglie anno e mese, poi il file PDF si salva direttamente (niente stampa).
+async function scegliMesePDF() {
   const base = vista === "anno" ? oggiMezzanotte() : dataCorrente;
-  const anno = base.getFullYear(), mese = base.getMonth();
-  const nomeMese = new Date(anno, mese, 1).toLocaleDateString("it-IT", { month: "long", year: "numeric" });
-  const giorni = new Date(anno, mese + 1, 0).getDate();
-  const nomi = ids => ids.map(nomeDi).sort((a, b) => a.localeCompare(b, "it")).join(", ");
-  const cella = (k, d, t) => {
-    if (chiusoTurno(d, t)) return `<td class="chiuso">CHIUSO</td>`;
-    const ids = ufficiali(k, t).filter(id => profilo(id));
-    const sala = ids.filter(id => settoreDi(profilo(id)) === "sala"), cucina = ids.filter(id => settoreDi(profilo(id)) === "cucina");
-    if (!ids.length) return `<td class="vuoto">—</td>`;
-    return `<td>${sala.length ? `<div><b>Sala:</b> ${esc(nomi(sala))}</div>` : ""}${cucina.length ? `<div><b>Cucina:</b> ${esc(nomi(cucina))}</div>` : ""}</td>`;
-  };
-  let righe = "";
-  for (let n = 1; n <= giorni; n++) {
-    const d = new Date(anno, mese, n), k = chiaveData(d);
-    const pr = TURNI.filter(t => !chiusoTurno(d, t) && prenotati(k, t)).map(t => `${t === "pranzo" ? "P" : "C"} ${prenotati(k, t)}`).join(" · ");
-    righe += `<tr><td class="data">${esc(d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric" }))}</td>${cella(k, d, "pranzo")}${cella(k, d, "cena")}<td class="pren">${pr || ""}</td></tr>`;
+  let anno = base.getFullYear(), mese = base.getMonth();
+  const MESI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  const r = await finestra("Scarica PDF del mese", `
+    <div class="pdf-anno"><button type="button" class="freccia" data-anno="-1" aria-label="Anno prima">‹</button><b id="pdf-anno">${anno}</b><button type="button" class="freccia" data-anno="1" aria-label="Anno dopo">›</button></div>
+    <div class="pdf-mesi" id="pdf-mesi">${MESI.map((m, i) => `<button type="button" class="chip ${i === mese ? "attivo" : ""}" data-mese="${i}">${m}</button>`).join("")}</div>
+    <p class="nota">Calendario del mese intero con i turni ufficiali di sala e cucina e i prenotati.</p>
+    ${bottoniOkAnnulla("Scarica PDF")}`, (dlg, fatto) => {
+    dlg.querySelectorAll("[data-anno]").forEach(b => b.onclick = () => { anno += Number(b.dataset.anno); dlg.querySelector("#pdf-anno").textContent = anno; });
+    dlg.querySelectorAll("[data-mese]").forEach(b => b.onclick = () => { mese = Number(b.dataset.mese); dlg.querySelectorAll("[data-mese]").forEach(x => x.classList.toggle("attivo", x === b)); });
+    dlg.querySelector('[data-azione="annulla"]').onclick = () => fatto(undefined);
+    dlg.querySelector("form").onsubmit = e => { e.preventDefault(); fatto({ anno, mese }); };
+  });
+  if (r) salvaPDFMese(r.anno, r.mese);
+}
+async function salvaPDFMese(anno, mese) {
+  const nomi = ids => ids.map(nomeDi).sort((a, b) => a.localeCompare(b, "it"));
+  const { byte, nomeFile } = window.creaCalendarioPDF({
+    anno, mese, ristorante: D.ristorante ? D.ristorante.nome : "",
+    dati: (g, t) => {
+      const d = daChiave(g);
+      if (chiusoTurno(d, t)) return { chiuso: true, sala: [], cucina: [], prenotati: 0 };
+      const ids = ufficiali(g, t).filter(id => profilo(id));
+      return { chiuso: false, prenotati: prenotati(g, t),
+        sala: nomi(ids.filter(id => settoreDi(profilo(id)) === "sala")),
+        cucina: nomi(ids.filter(id => settoreDi(profilo(id)) === "cucina")) };
+    },
+    notaChiusura: g => regoleSu(daChiave(g)).map(c => c.nota).find(Boolean) || "",
+  });
+  const file = new File([byte], nomeFile, { type: "application/pdf" });
+  // App installata su iPhone/iPad: il download diretto non funziona, si apre il foglio "Salva su File"
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (ios && navigator.standalone && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nomeFile }); return; } catch (e) { if (e.name === "AbortError") return; }
   }
-  $("stampa").innerHTML = `
-    <h1>Turni · ${esc(D.ristorante ? D.ristorante.nome : "")} · ${esc(nomeMese)}</h1>
-    <table>
-      <colgroup><col class="c-data"><col class="c-turno"><col class="c-turno"><col class="c-pren"></colgroup>
-      <thead><tr><th>Giorno</th><th>Pranzo</th><th>Cena</th><th>Prenotati</th></tr></thead>
-      <tbody>${righe}</tbody>
-    </table>
-    <p class="piede">Solo turni ufficiali · stampato il ${esc(new Date().toLocaleDateString("it-IT"))}</p>`;
-  const titolo = document.title;
-  document.title = `Turni ${nomeMese}`;   // diventa il nome del file PDF
-  setTimeout(() => { window.print(); setTimeout(() => { document.title = titolo; }, 500); }, 50);
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url; a.download = nomeFile; a.style.display = "none";
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 5000);
 }
 function aggiornaImpostazioni() {
   const p = mioProfilo();

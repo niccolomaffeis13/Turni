@@ -2,9 +2,9 @@
 //  SERVICE WORKER — fa partire l'app anche senza internet (come nell'agenda)
 //  Con internet prende sempre la versione nuova; senza usa la copia salvata.
 // =====================================================================
-const CACHE = "turni-v3";
+const CACHE = "turni-v4";
 const FILE_APP = [
-  "./", "index.html", "style.css", "turni.css", "config.js", "app.js", "cloud.js", "manifest.json",
+  "./", "index.html", "style.css", "turni.css", "config.js", "app.js", "cloud.js", "pdf-calendario.js", "manifest.json",
   "icone/icona-192.png", "icone/icona-512.png", "icone/apple-touch-icon.png", "icone/favicon.png",
 ];
 const LIBRERIA = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js";
